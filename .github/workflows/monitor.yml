@@ -1,0 +1,39 @@
+name: monitor
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: estado
+          key: estado-${{ github.run_id }}
+          restore-keys: estado-
+      - name: Revisar servicios
+        id: rev
+        env:
+          MONITOR_URLS: ${{ secrets.MONITOR_URLS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          WAHA_KEY: ${{ secrets.WAHA_KEY }}
+          WA_CHAT: ${{ secrets.WA_CHAT }}
+        run: ./monitor.sh
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: estado
+          key: estado-${{ github.run_id }}
+      # GitHub apaga los cron de repos sin actividad en 60 días: si el último commit tiene más de 30 días, hace uno vacío
+      - name: Mantener vivo
+        if: always() && github.event_name == 'schedule'
+        run: |
+          if [ $(( $(date +%s) - $(git log -1 --format=%ct) )) -gt 2592000 ]; then
+            git config user.name oaf-monitor; git config user.email monitor@users.noreply.github.com
+            git commit --allow-empty -m "keepalive $(date -u +%F)" && git push
+          fi
