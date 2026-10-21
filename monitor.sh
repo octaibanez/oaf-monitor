@@ -16,6 +16,17 @@ for par in $MONITOR_URLS; do
   [ $ok = 0 ] && caidos="$caidos $nombre($code)"
   echo "$nombre: $code"
 done
+# Sesión de WAHA (testrodz manda todos los avisos a los grupos): el servidor puede responder 200
+# con la sesión caída. Si no está WORKING, se reinicia una vez; si sigue mal, cuenta como caída.
+waha_estado() { curl -s -m 20 -H "X-Api-Key: $WAHA_KEY" https://waha.oafiagency.online/api/sessions/testrodz | jq -r '.status // "SIN_RESPUESTA"' 2>/dev/null || echo SIN_RESPUESTA; }
+ses=$(waha_estado)
+if [ "$ses" != "WORKING" ] && [ "$ses" != "SCAN_QR_CODE" ]; then
+  echo "waha-sesion: $ses -> reinicio"
+  curl -s -m 20 -X POST -H "X-Api-Key: $WAHA_KEY" https://waha.oafiagency.online/api/sessions/testrodz/restart >/dev/null || true
+  for i in 1 2 3 4 5 6 7 8 9; do sleep 10; ses=$(waha_estado); [ "$ses" = "WORKING" ] && break; done
+fi
+echo "waha-sesion: $ses"
+[ "$ses" != "WORKING" ] && caidos="$caidos waha-sesion-testrodz($ses)"
 ahora=$(echo $caidos | tr ' ' '\n' | sed 's/(.*//' | grep -v '^$' | sort -u)
 echo "$ahora" > "$ESTADO_FILE"
 
